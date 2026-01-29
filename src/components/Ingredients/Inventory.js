@@ -23,8 +23,8 @@ const Inventory = ({ setCurrentView, userId }) => {
   });
 
   useEffect(() => {
-    loadIngredients();
-  }, [userId]);
+  loadIngredients();
+  }, [loadIngredients]);
 
   const loadIngredients = async () => {
     try {
@@ -108,7 +108,7 @@ const Inventory = ({ setCurrentView, userId }) => {
   const saveEdit = (id) => {
     const newQuantity = parseFloat(editForm.quantity);
 
-    // 🚨 VALIDACIÓN ANTES DEL MODAL
+    //  VALIDACION ANTES DEL MODAL
     if (!newQuantity || newQuantity < 0.5) {
       showModal(
         'error',

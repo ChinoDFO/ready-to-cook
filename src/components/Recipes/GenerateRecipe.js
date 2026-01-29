@@ -30,8 +30,9 @@ const GenerateRecipe = ({ setCurrentView, userId, setGeneratedRecipes, setCurren
   ];
 
   useEffect(() => {
-    loadData();
-  }, [userId]);
+  loadData();
+  }, [loadData]);
+
 
   const loadData = async () => {
     try {

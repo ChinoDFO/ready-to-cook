@@ -16,11 +16,8 @@ const RecipeResults = ({
   const [usedRecipeNames, setUsedRecipeNames] = useState([]);
 
   // Guardar los parámetros de la última generación
-  const [lastParams, setLastParams] = useState(() => {
-    const saved = sessionStorage.getItem('lastRecipeParams');
-    return saved ? JSON.parse(saved) : null;
-  });
-
+  const [lastParams] = useState(null);
+  
   if (!recipes || recipes.length === 0) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-emerald-50 to-teal-50 p-6 flex items-center justify-center">
