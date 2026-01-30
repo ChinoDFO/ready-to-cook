@@ -1,7 +1,7 @@
 // src/services/openaiService.js
 import axios from 'axios';
 
-const API_URL = 'http://localhost:3001/openai';
+const API_URL = 'https://TU-PROYECTO.vercel.app/api/openai';
 
 export const generateRecipe = async ({
   ingredients,
