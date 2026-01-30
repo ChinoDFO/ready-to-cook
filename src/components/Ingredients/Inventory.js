@@ -22,15 +22,13 @@ const Inventory = ({ setCurrentView, userId }) => {
     onConfirm: () => {}
   });
 
-  const loadIngredients = async () => {
+  async function loadIngredients() {
   try {
+    console.log('UserID:', userId);
     const querySnapshot = await getDocs(collection(db, `users/${userId}/ingredients`));
-    const ingredientsData = querySnapshot.docs.map(doc => ({
-      id: doc.id,
-      ...doc.data()
-    }));
+    const ingredientsData = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+    console.log('Ingredients raw:', ingredientsData);
 
-    // Ordenar
     const sorted = ingredientsData.sort((a, b) => {
       const aExpired = isExpired(a.expirationDate);
       const bExpired = isExpired(b.expirationDate);
@@ -44,17 +42,17 @@ const Inventory = ({ setCurrentView, userId }) => {
       return 0;
     });
 
-    // Aquí puedes setear tu estado
-    // setIngredients(sorted);
+    console.log('Ingredients sorted:', sorted);
+    setIngredients(sorted);
 
   } catch (error) {
-    console.error(error);
+    console.error('Error loading ingredients:', error);
   }
-};
+}
 
 useEffect(() => {
-  loadIngredients();
-}, []); // ya no necesitas poner loadIngredients en las dependencias
+  if (userId) loadIngredients();
+}, [userId]);// ya no necesitas poner loadIngredients en las dependencias
 
 
   const showModal = (type, title, message, onConfirm = () => {}) => {
