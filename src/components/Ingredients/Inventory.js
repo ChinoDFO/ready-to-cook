@@ -25,9 +25,14 @@ const Inventory = ({ setCurrentView, userId }) => {
   async function loadIngredients() {
   try {
     console.log('UserID:', userId);
-    const querySnapshot = await getDocs(collection(db, `users/${userId}/ingredients`));
-    const ingredientsData = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-    console.log('Ingredients raw:', ingredientsData);
+    const querySnapshot = await getDocs(
+      collection(db, `users/${userId}/ingredients`)
+    );
+
+    const ingredientsData = querySnapshot.docs.map(doc => ({
+      id: doc.id,
+      ...doc.data()
+    }));
 
     const sorted = ingredientsData.sort((a, b) => {
       const aExpired = isExpired(a.expirationDate);
@@ -42,11 +47,11 @@ const Inventory = ({ setCurrentView, userId }) => {
       return 0;
     });
 
-    console.log('Ingredients sorted:', sorted);
     setIngredients(sorted);
-
   } catch (error) {
     console.error('Error loading ingredients:', error);
+  } finally {
+    setLoading(false); // 🔥 ESTA LÍNEA ES LA CLAVE DEL UNIVERSO
   }
 }
 
