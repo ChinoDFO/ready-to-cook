@@ -22,40 +22,40 @@ const Inventory = ({ setCurrentView, userId }) => {
     onConfirm: () => {}
   });
 
-  useEffect(() => {
-  loadIngredients();
-  }, [loadIngredients]);
-
   const loadIngredients = async () => {
-    try {
-      const querySnapshot = await getDocs(collection(db, `users/${userId}/ingredients`));
-      const ingredientsData = querySnapshot.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data()
-      }));
-      
-      // Ordenar: caducados al final, luego prioritarios, luego normales
-      const sorted = ingredientsData.sort((a, b) => {
-        const aExpired = isExpired(a.expirationDate);
-        const bExpired = isExpired(b.expirationDate);
-        const aPriority = isPriority(a.expirationDate);
-        const bPriority = isPriority(b.expirationDate);
-        
-        if (aExpired && !bExpired) return 1;
-        if (!aExpired && bExpired) return -1;
-        if (aPriority && !bPriority) return -1;
-        if (!aPriority && bPriority) return 1;
-        return 0;
-      });
-      
-      setIngredients(sorted);
-    } catch (error) {
-      console.error('Error al cargar ingredientes:', error);
-      showModal('error', 'Error', 'Error al cargar el inventario');
-    } finally {
-      setLoading(false);
-    }
-  };
+  try {
+    const querySnapshot = await getDocs(collection(db, `users/${userId}/ingredients`));
+    const ingredientsData = querySnapshot.docs.map(doc => ({
+      id: doc.id,
+      ...doc.data()
+    }));
+
+    // Ordenar
+    const sorted = ingredientsData.sort((a, b) => {
+      const aExpired = isExpired(a.expirationDate);
+      const bExpired = isExpired(b.expirationDate);
+      const aPriority = isPriority(a.expirationDate);
+      const bPriority = isPriority(b.expirationDate);
+
+      if (aExpired && !bExpired) return 1;
+      if (!aExpired && bExpired) return -1;
+      if (aPriority && !bPriority) return -1;
+      if (!aPriority && bPriority) return 1;
+      return 0;
+    });
+
+    // Aquí puedes setear tu estado
+    // setIngredients(sorted);
+
+  } catch (error) {
+    console.error(error);
+  }
+};
+
+useEffect(() => {
+  loadIngredients();
+}, []); // ya no necesitas poner loadIngredients en las dependencias
+
 
   const showModal = (type, title, message, onConfirm = () => {}) => {
     setModalConfig({
