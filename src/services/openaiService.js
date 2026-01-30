@@ -1,7 +1,7 @@
 // src/services/openaiService.js
 import axios from 'axios';
 
-const API_URL = '/api/openai';
+const API_URL = 'https://ready-to-cook-api.onrender.com/api/openai';
 
 export const generateRecipe = async ({
   ingredients,
