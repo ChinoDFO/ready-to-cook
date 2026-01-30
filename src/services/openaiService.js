@@ -138,9 +138,11 @@ export const generateRecipe = async ({
     let result;
     try {
       result = JSON.parse(jsonMatch[0]);
-    } catch (e) {
-      console.error('JSON malformado:', jsonMatch[0]);
-      throw new Error('JSON invalido.');
+    } catch {
+      const safeJSON = jsonMatch[0]
+        .replace(/[\u2018\u2019]/g, "'")
+        .replace(/'/g, '"');
+      result = JSON.parse(safeJSON);
     }
 
     // Verificar si hay un error de compatibilidad
