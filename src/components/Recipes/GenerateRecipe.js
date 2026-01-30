@@ -29,71 +29,46 @@ const GenerateRecipe = ({ setCurrentView, userId, setGeneratedRecipes, setCurren
     'Vegetariana', 'Alta en proteína'
   ];
 
-  useEffect(() => {
-  const loadData = async () => {
-    try {
-      // Cargar ingredientes (solo los NO caducados)
-      const ingredientsSnapshot = await getDocs(collection(db, `users/${userId}/ingredients`));
-      const ingredientsData = ingredientsSnapshot.docs
-        .map(doc => ({ id: doc.id, ...doc.data() }))
-        .filter(ing => !isExpired(ing.expirationDate));
-      setIngredients(ingredientsData);
+const loadData = async () => {
+  try {
+    const ingredientsSnapshot = await getDocs(
+      collection(db, `users/${userId}/ingredients`)
+    );
 
-      // Cargar platillos pendientes (solo los NO caducados)
-      const dishesSnapshot = await getDocs(collection(db, `users/${userId}/pendingDishes`));
-      const dishesData = dishesSnapshot.docs
-        .map(doc => {
-          const data = doc.data();
-          return { id: doc.id, ...data, daysRemaining: getDaysRemaining(data.expirationDate) || 0 };
-        })
-        .filter(dish => !isExpired(dish.expirationDate));
-      setPendingDishes(dishesData);
-    } catch (error) {
-      console.error('Error al cargar datos:', error);
-      setError('Error al cargar ingredientes');
-    } finally {
-      setLoading(false);
-    }
-  };
-  loadData();
-}, [userId]); // <- dependemos solo de userId, no de loadData
+    const ingredientsData = ingredientsSnapshot.docs
+      .map(doc => ({ id: doc.id, ...doc.data() }))
+      .filter(ing => !isExpired(ing.expirationDate));
 
+    setIngredients(ingredientsData);
 
+    const dishesSnapshot = await getDocs(
+      collection(db, `users/${userId}/pendingDishes`)
+    );
 
-  const loadData = async () => {
-    try {
-      // Cargar ingredientes (solo los NO caducados)
-      const ingredientsSnapshot = await getDocs(collection(db, `users/${userId}/ingredients`));
-      const ingredientsData = ingredientsSnapshot.docs
-        .map(doc => ({
+    const dishesData = dishesSnapshot.docs
+      .map(doc => {
+        const data = doc.data();
+        return {
           id: doc.id,
-          ...doc.data()
-        }))
-        .filter(ing => !isExpired(ing.expirationDate));
-      
-      setIngredients(ingredientsData);
+          ...data,
+          daysRemaining: getDaysRemaining(data.expirationDate) || 0
+        };
+      })
+      .filter(dish => !isExpired(dish.expirationDate));
 
-      // Cargar platillos pendientes (solo los NO caducados)
-      const dishesSnapshot = await getDocs(collection(db, `users/${userId}/pendingDishes`));
-      const dishesData = dishesSnapshot.docs
-        .map(doc => {
-          const data = doc.data();
-          return {
-            id: doc.id,
-            ...data,
-            daysRemaining: getDaysRemaining(data.expirationDate) || 0
-          };
-        })
-        .filter(dish => !isExpired(dish.expirationDate));
-      
-      setPendingDishes(dishesData);
-    } catch (error) {
-      console.error('Error al cargar datos:', error);
-      setError('Error al cargar ingredientes');
-    } finally {
-      setLoading(false);
-    }
-  };
+    setPendingDishes(dishesData);
+  } catch (error) {
+    console.error('Error al cargar datos:', error);
+    setError('Error al cargar ingredientes');
+  } finally {
+    setLoading(false);
+  }
+};
+
+useEffect(() => {
+  loadData();
+}, [userId]);
+
 
   // Separar ingredientes prioritarios y normales
   const priorityIngredients = ingredients.filter(ing => isPriority(ing.expirationDate));
