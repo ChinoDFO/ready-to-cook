@@ -1,461 +1,197 @@
-// src/components/Recipes/GenerateRecipe.js
-import React, { useState, useEffect } from 'react';
-import { collection, getDocs } from 'firebase/firestore';
-import { db } from '../../services/firebase';
-import { Search, AlertCircle, ChefHat } from 'lucide-react';
-import { isPriority, isExpired, getDaysRemaining } from '../../utils/dateCalculations';
-import { generateRecipe } from '../../services/openaiService';
+// src/services/openaiService.js
+import axios from 'axios';
 
-const GenerateRecipe = ({ setCurrentView, userId, setGeneratedRecipes, setCurrentRecipeIndex }) => {
-  const [ingredients, setIngredients] = useState([]);
-  const [pendingDishes, setPendingDishes] = useState([]);
-  const [selectedIngredients, setSelectedIngredients] = useState([]);
-  const [selectedDishes, setSelectedDishes] = useState([]);
-  const [searchTerm, setSearchTerm] = useState('');
-  const [loading, setLoading] = useState(true);
-  const [generating, setGenerating] = useState(false);
-  const [error, setError] = useState('');
-  const [errorType, setErrorType] = useState('');
+const API_URL = 'https://ready-to-cook-api.onrender.com/api/openai';
 
-  
-  // Opciones de receta
-  const [selectedCategories, setSelectedCategories] = useState([]);
-  const [mealTime, setMealTime] = useState('Comida');
-  const [servings, setServings] = useState(2);
-
-  const categories = [
-    'Snack', 'Postre', 'Saludable', 'Rápida', 
-    'Internacional', 'Mexicana', 'Vegana', 
-    'Vegetariana', 'Alta en proteína'
-  ];
-
-const loadData = async () => {
+export const generateRecipe = async ({
+  ingredients,
+  categories,
+  mealTime,
+  servings,
+  priorityOnly = false,
+  regenerate = false,
+  usedRecipeNames = []
+}) => {
   try {
-    const ingredientsSnapshot = await getDocs(
-      collection(db, `users/${userId}/ingredients`)
-    );
+    // Crear lista de ingredientes
+    const ingredientsList = ingredients.map(ing => 
+      `${ing.name} (${ing.quantity} ${ing.unit})`
+    ).join(', ');
 
-    const ingredientsData = ingredientsSnapshot.docs
-      .map(doc => ({ id: doc.id, ...doc.data() }))
-      .filter(ing => !isExpired(ing.expirationDate));
+    // Crear texto de categorías
+    const categoriesText = categories.length > 0 
+      ? `Categorías: ${categories.join(', ')}` 
+      : '';
+    
+    // Texto adicional si es regeneración
+    const regenerateText = regenerate 
+      ? '\n\n⚠️ IMPORTANTE: Genera una receta COMPLETAMENTE DIFERENTE a la anterior. No repitas la misma receta, usa diferentes técnicas de cocción, sabores y/o combinaciones.'
+      : '';
+    const usedNamesText = usedRecipeNames.length > 0
+      ? `\n\nRECETAS YA GENERADAS (NO REPITAS NOMBRES NI PLATILLOS SIMILARES): ${usedRecipeNames.join(', ')}`
+      : '';
 
-    setIngredients(ingredientsData);
+    
+    // Crear el prompt para GPT
+    const prompt = `Eres un chef experto. Genera 1 receta usando estos ingredientes DISPONIBLES EN EL INVENTARIO: ${ingredientsList}.
 
-    const dishesSnapshot = await getDocs(
-      collection(db, `users/${userId}/pendingDishes`)
-    );
+    ${categoriesText}
+    Horario: ${mealTime}
+    Porciones: ${servings} personas
+    ${priorityOnly ? 'IMPORTANTE: Prioriza el uso de TODOS los ingredientes disponibles.' : ''}
+    ${regenerateText}
+    ${usedNamesText}
 
-    const dishesData = dishesSnapshot.docs
-      .map(doc => {
-        const data = doc.data();
-        return {
-          id: doc.id,
-          ...data,
-          daysRemaining: getDaysRemaining(data.expirationDate) || 0
-        };
-      })
-      .filter(dish => !isExpired(dish.expirationDate));
+    REGLAS CRÍTICAS:
+    1. Si las categorías seleccionadas son incompatibles con los ingredientes disponibles (por ejemplo, "Vegetariana" pero hay carne, o "Vegana" pero hay lácteos/huevos), debes responder con un mensaje de error en lugar de generar una receta.
+    2. Si no es posible crear una receta que cumpla con TODAS las categorías seleccionadas simultáneamente, responde con un mensaje de error explicando la incompatibilidad.
+    3. Solo genera la receta si todos los ingredientes disponibles son compatibles con todas las categorías seleccionadas.
 
-    setPendingDishes(dishesData);
-  } catch (error) {
-    console.error('Error al cargar datos:', error);
-    setError('Error al cargar ingredientes');
-  } finally {
-    setLoading(false);
-  }
-};
+    SEPARACIÓN DE INGREDIENTES (MUY IMPORTANTE):
+    - En "ingredients": SOLO incluye los ingredientes que están en la lista de DISPONIBLES arriba.
+    - En "missingIngredients": incluye CUALQUIER ingrediente que necesites pero NO esté en la lista de disponibles (sal, aceite, harina, azúcar, especias, condimentos, miel, etc.) y que cada ingrediente empiece con MAYÚSCULA.
+    - Si un ingrediente NO está en la lista de disponibles, DEBE ir en "missingIngredients", sin excepción.
 
-useEffect(() => {
-  loadData();
-}, [userId]);
+    FORMATO DE CANTIDADES (MUY IMPORTANTE):
+    - Si la cantidad de un ingrediente NO es un número (por ejemplo: "al gusto", "una pizca", "suficiente"), la primera letra DEBE ir en MAYÚSCULA.
+    - Ejemplos correctos: "Al gusto", "Una pizca", "Suficiente".
+    - NUNCA escribas cantidades no numéricas en minúsculas.
 
+    Para recetas válidas proporciona:
+    1. Nombre atractivo de la receta
+    2. Lista de ingredientes (SOLO los disponibles) con cantidades exactas ajustadas a ${servings} personas
+    3. Lista de ingredientes faltantes (TODO lo que necesites pero no esté disponible)
+    4. Pasos de preparación numerados y detallados
+    5. Tiempo estimado de preparación en minutos
+    6. Si la receta no puede ajustarse exactamente a ${servings} personas por la naturaleza de los ingredientes, indícalo
 
-  // Separar ingredientes prioritarios y normales
-  const priorityIngredients = ingredients.filter(ing => isPriority(ing.expirationDate));
-  const normalIngredients = ingredients.filter(ing => !isPriority(ing.expirationDate));
+    Formato de respuesta en JSON:
 
-  // Filtrar por búsqueda
-  const filteredPriority = priorityIngredients.filter(ing =>
-    ing.name.toLowerCase().includes(searchTerm.toLowerCase())
-  );
-  const filteredNormal = normalIngredients.filter(ing =>
-    ing.name.toLowerCase().includes(searchTerm.toLowerCase())
-  );
-
-  const toggleIngredient = (ingredientId) => {
-    if (selectedIngredients.includes(ingredientId)) {
-      setSelectedIngredients(selectedIngredients.filter(id => id !== ingredientId));
-    } else {
-      setSelectedIngredients([...selectedIngredients, ingredientId]);
+    Para ERROR (categorías incompatibles):
+    {
+      "error": "No es posible generar una receta [categoría] con los ingredientes seleccionados. [Explicación específica del conflicto]"
     }
-  };
 
-  const toggleDish = (dishId) => {
-    if (selectedDishes.includes(dishId)) {
-      setSelectedDishes(selectedDishes.filter(id => id !== dishId));
-    } else {
-      setSelectedDishes([...selectedDishes, dishId]);
+    Para receta VÁLIDA:
+    {
+      "recipe": [
+        {
+          "name": "Nombre de la receta",
+          "categories": ["categoria1", "categoria2"],
+          "ingredients": [
+            {"name": "ingrediente", "quantity": "cantidad", "unit": "unidad"}
+          ],
+          "missingIngredients": [
+            {"name": "ingrediente", "quantity": "cantidad", "unit": "unidad"}
+          ],
+          "instructions": ["paso 1", "paso 2", ...],
+          "prepTime": 30,
+          "servings": ${servings},
+          "portionWarning": "Texto de advertencia si aplica o null"
+        }
+      ]
     }
-  };
-
-  const toggleCategory = (category) => {
-    if (selectedCategories.includes(category)) {
-      setSelectedCategories(selectedCategories.filter(cat => cat !== category));
-    } else {
-      setSelectedCategories([...selectedCategories, category]);
-    }
-  };
-
-  const handleGenerate = async (priorityOnly = false) => {
-    setError('');
-
-    // Validaciones
-    let ingredientsToUse = priorityOnly 
-      ? priorityIngredients.map(ing => ing.id)
-      : selectedIngredients;
-
       
-    if (ingredientsToUse.length === 0 && selectedDishes.length === 0) {
-      setError('Por favor selecciona al menos un ingrediente o platillo almacenado');
-      setErrorType('validation');
-      return;
-    }
+    ⚠️ RESPUESTA FINAL OBLIGATORIA:
+    - Devuelve SOLO el JSON.
+    - No escribas texto antes ni después.
+    - No uses bloques de codigo.
+    - No incluyas texto explicativo.`;
 
-    if (selectedCategories.length === 0) {
-      setError('Por favor selecciona al menos una categoría');
-      setErrorType('validation');
-      return;
-    }
-
-    setGenerating(true);
-
-    try {
-      // Preparar datos para la IA
-      const selectedIngredientsData = ingredients.filter(ing => 
-        ingredientsToUse.includes(ing.id)
-      );
-
-      const selectedDishesData = pendingDishes.filter(dish =>
-        selectedDishes.includes(dish.id)
-      );
-
-      // Combinar ingredientes y platillos
-      const allItems = [
-        ...selectedIngredientsData.map(ing => ({
-          name: ing.name,
-          quantity: ing.quantity,
-          unit: ing.unit
-        })),
-        ...selectedDishesData.map(dish => ({
-          name: dish.name,
-          quantity: '1',
-          unit: 'porción'
-        }))
-      ];
-
-      // Generar recetas con OpenAI
-      const recipes = await generateRecipe({
-      ingredients: allItems,
-      categories: selectedCategories,
-      mealTime,
-      servings,
-      priorityOnly
+    // Hacer petición con Axios
+    const response = await axios.post(API_URL, {
+      model: 'gpt-4o-mini',
+      messages: [
+        {
+          role: 'system',
+          content: `
+            Responde EXCLUSIVAMENTE con JSON valido.
+            No escribas texto fuera del JSON.
+            No incluyas comentarios ni explicaciones.`
+        },
+        {
+          role: 'user',
+          content: prompt
+        }
+      ],
+      temperature: regenerate ? 0.75 : 0.6,
+      top_p: 0.95,
+      presence_penalty: regenerate ? 0.8 : 0.2,
+      frequency_penalty: regenerate ? 0.6 : 0.2,
+      max_tokens: 700
+    }, {
+      headers: {
+        'Content-Type': 'application/json'
+      }
     });
 
-    sessionStorage.setItem('lastRecipeParams', JSON.stringify({
-      ingredients: allItems,
-      categories: selectedCategories,
-      mealTime,
-      servings,
-      priorityOnly
-    }));
+    const content = response.data.choices[0].message.content.trim();
 
-    setGeneratedRecipes(recipes);
-    setCurrentRecipeIndex(0);
-    setCurrentView('recipe-results');
+    // Extraer solo el primer JSON valido
+    const jsonMatch = content.match(/\{[\s\S]*\}$/);
 
-    } catch (error) {
-      console.error('Error al generar recetas:', error);
-      
-      // ✅ MOSTRAR EL ERROR AL USUARIO EN EL FRONTEND
-      if (error.message && error.message.includes('No es posible')) {
-        // Error de categorías incompatibles
-        setError(error.message);
-        setErrorType('ai');
-      } else {
-        // Error genérico
-        setError('Error al generar recetas. Verifica tu conexión y API key de OpenAI.');
-        setErrorType('ai');
-      }
-    } finally {
-      setGenerating(false);
+    if (!jsonMatch) {
+      console.error('Respuesta cruda de OpenAI:', content);
+      throw new Error('No se encontro un JSON valido en la respuesta.');
     }
-  };
 
-  if (loading) {
-    return (
-      <div className="min-h-screen bg-gradient-to-br from-emerald-50 to-teal-50 flex items-center justify-center">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-16 w-16 border-b-4 border-emerald-500 mx-auto mb-4"></div>
-          <p className="text-gray-600 font-semibold">Cargando...</p>
-        </div>
-      </div>
-    );
+    let result;
+    try {
+      result = JSON.parse(jsonMatch[0]);
+    } catch (e) {
+      console.error('JSON malformado:', jsonMatch[0]);
+      throw new Error('JSON invalido.');
+    }
+
+    // Verificar si hay un error de compatibilidad
+    if (result.error) {
+      throw new Error(result.error);
+    }
+    
+    return result.recipe;
+  } catch (error) {
+    console.error('Error al generar receta:', error);
+    throw error;
   }
-
-  return (
-    <div className="min-h-screen bg-gradient-to-br from-emerald-50 to-teal-50 p-6">
-      <div className="max-w-6xl mx-auto">
-        <button 
-          onClick={() => setCurrentView('menu')} 
-          className="mb-6 text-emerald-600 font-semibold hover:underline"
-        >
-          ← Volver al menú
-        </button>
-        
-        <div className="bg-white rounded-2xl shadow-xl p-8">
-          <h2 className="text-3xl font-bold text-gray-800 mb-6">Generar Recetas con IA</h2>
-          
-          {/* Buscador */}
-          <div className="mb-6">
-            <div className="relative">
-              <Search className="absolute left-3 top-3 text-gray-400" size={20} />
-              <input 
-                type="text"
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500" 
-                placeholder="Buscar ingrediente en tu inventario..."
-              />
-            </div>
-          </div>
-          
-          {/* Ingredientes Prioritarios */}
-          {filteredPriority.length > 0 && (
-            <div className="mb-6">
-              <div className="flex items-center gap-2 mb-3">
-                <AlertCircle className="text-red-500" size={20} />
-                <h3 className="text-lg font-bold text-gray-800">
-                  Ingredientes Prioritarios (Próximos a caducar)
-                </h3>
-              </div>
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                {filteredPriority.map(ing => (
-                  <div 
-                    key={ing.id}
-                    onClick={() => toggleIngredient(ing.id)}
-                    className={`border-2 rounded-lg p-3 cursor-pointer transition ${
-                      selectedIngredients.includes(ing.id)
-                        ? 'border-red-500 bg-red-100'
-                        : 'border-red-200 bg-red-50 hover:bg-red-100'
-                    }`}
-                  >
-                    <div className="flex items-start justify-between">
-                      <div>
-                        <p className="font-semibold text-gray-800 text-sm">{ing.name}</p>
-                        <p className="text-xs text-red-600">
-                          {ing.quantity} {ing.unit}
-                        </p>
-                      </div>
-                      <input 
-                        type="checkbox" 
-                        checked={selectedIngredients.includes(ing.id)}
-                        onChange={() => {}}
-                        className="mt-1"
-                      />
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-          
-          {/* Ingredientes Generales */}
-          {filteredNormal.length > 0 && (
-            <div className="mb-6">
-              <h3 className="text-lg font-bold text-gray-800 mb-3">Ingredientes Disponibles</h3>
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                {filteredNormal.map(ing => (
-                  <div 
-                    key={ing.id}
-                    onClick={() => toggleIngredient(ing.id)}
-                    className={`border-2 rounded-lg p-3 cursor-pointer transition ${
-                      selectedIngredients.includes(ing.id)
-                        ? 'border-emerald-500 bg-emerald-50'
-                        : 'border-gray-200 hover:bg-gray-50'
-                    }`}
-                  >
-                    <div className="flex items-start justify-between">
-                      <div>
-                        <p className="font-semibold text-gray-800 text-sm">{ing.name}</p>
-                        <p className="text-xs text-gray-500">
-                          {ing.quantity} {ing.unit}
-                        </p>
-                      </div>
-                      <input 
-                        type="checkbox"
-                        checked={selectedIngredients.includes(ing.id)}
-                        onChange={() => {}}
-                        className="mt-1"
-                      />
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {/* Platillos Almacenados */}
-          {pendingDishes.length > 0 && (
-            <div className="mb-6">
-              <h3 className="text-lg font-bold text-gray-800 mb-3">Platillos Almacenados</h3>
-              <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
-                {pendingDishes.map(dish => {
-                  const isExpiringSoon = dish.daysRemaining <= 2;
-                  
-                  return (
-                    <div 
-                      key={dish.id}
-                      onClick={() => toggleDish(dish.id)}
-                      className={`border-2 rounded-lg p-3 cursor-pointer transition ${
-                        selectedDishes.includes(dish.id)
-                          ? 'border-orange-500 bg-orange-100'
-                          : 'border-orange-200 bg-orange-50 hover:bg-orange-100'
-                      }`}
-                    >
-                      <div className="flex items-start justify-between">
-                        <div>
-                          <p className="font-semibold text-gray-800 text-sm">{dish.name}</p>
-                          <p className={`text-xs ${isExpiringSoon ? 'text-red-600 font-semibold' : 'text-orange-600'}`}>
-                            Caduca en {dish.daysRemaining} días
-                          </p>
-                        </div>
-                        <input 
-                          type="checkbox"
-                          checked={selectedDishes.includes(dish.id)}
-                          onChange={() => {}}
-                          className="mt-1"
-                        />
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-          )}
-          
-          {/* Mensaje si no hay ingredientes disponibles */}
-          {ingredients.length === 0 && pendingDishes.length === 0 && (
-            <div className="text-center py-8 bg-gray-50 rounded-lg mb-6">
-              <p className="text-gray-600 mb-4">
-                No tienes ingredientes ni platillos disponibles para generar recetas.
-              </p>
-              <p className="text-sm text-gray-500 mb-4">
-                Los ingredientes y platillos caducados no se muestran aquí.
-              </p>
-              <button
-                onClick={() => setCurrentView('register-ingredient')}
-                className="bg-emerald-500 text-white px-6 py-2 rounded-lg font-semibold hover:bg-emerald-600 transition"
-              >
-                Registrar ingredientes
-              </button>
-            </div>
-          )}
-          
-          {/* Opciones de Receta */}
-          <div className="grid md:grid-cols-3 gap-4 mb-6">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Categorías
-              </label>
-              <div className="space-y-2 max-h-48 overflow-y-auto border border-gray-200 rounded-lg p-3">
-                {categories.map(cat => (
-                  <label key={cat} className="flex items-center gap-2 text-sm cursor-pointer">
-                    <input 
-                      type="checkbox"
-
-                      checked={selectedCategories.includes(cat)}
-                      onChange={() => toggleCategory(cat)}
-                      className="rounded"
-                    />
-                    <span>{cat}</span>
-                  </label>
-                ))}
-              </div>
-            </div>
-            
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Horario del platillo
-              </label>
-              <select 
-                value={mealTime}
-                onChange={(e) => setMealTime(e.target.value)}
-                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500"
-              >
-                <option>Desayuno</option>
-                <option>Comida</option>
-                <option>Cena</option>
-              </select>
-            </div>
-            
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Número de personas
-              </label>
-              <input 
-                type="number"
-                min="1"
-                max="20"
-                value={servings}
-                onChange={(e) => setServings(parseInt(e.target.value))}
-                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500"
-              />
-            </div>
-          </div>
-
-          {/* ✅ MOSTRAR ERROR AL USUARIO */}
-          {error && (
-            <div className="bg-red-50 border-2 border-red-300 text-red-700 px-4 py-3 rounded-lg text-sm mb-4 flex items-start gap-2">
-              <AlertCircle className="flex-shrink-0 mt-0.5" size={18} />
-              <div>
-                <p className="font-semibold mb-1">Error</p>
-                <p>{error}</p>
-
-                {errorType === 'ai' && (
-                  <p className="mt-2 text-xs">
-                    💡 Intenta ajustar las categorías seleccionadas o usar ingredientes diferentes.
-                  </p>
-                )}
-              </div>
-            </div>
-          )}
-
-
-          {/* Botones de generación */}
-          <button 
-            onClick={() => handleGenerate(false)}
-            disabled={generating || (ingredients.length === 0 && pendingDishes.length === 0)}
-            className="w-full bg-emerald-500 text-white py-3 rounded-lg font-semibold hover:bg-emerald-600 transition flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            <ChefHat size={20} />
-            {generating ? 'Generando recetas...' : 'Generar Recetas con IA'}
-          </button>
-          
-          {priorityIngredients.length > 0 && (
-            <button 
-              onClick={() => handleGenerate(true)}
-              disabled={generating}
-              className="w-full bg-red-500 text-white py-3 rounded-lg font-semibold hover:bg-red-600 transition flex items-center justify-center gap-2 mt-3 disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              <AlertCircle size={20} />
-              Generar Receta usando todos los Ingredientes Prioritarios
-            </button>
-          )}
-        </div>
-      </div>
-    </div>
-  );
 };
 
-export default GenerateRecipe;
+export const calculateDishShelfLife = async (ingredients) => {
+  try {
+    // Crear lista de ingredientes solo con nombres
+    const ingredientsList = ingredients.map(ing => ing.name).join(', ');
+
+    const prompt = `Como experto en seguridad alimentaria, calcula cuántos días se puede almacenar de forma segura en refrigeración un platillo preparado con estos ingredientes: ${ingredientsList}.
+
+Considera el ingrediente más perecedero una vez COCIDO/PREPARADO y las normas de seguridad alimentaria estándar para alimentos cocinados refrigerados.
+
+Responde ÚNICAMENTE con un número entero (días), sin texto adicional.`;
+
+    // Hacer petición con Axios
+    const response = await axios.post(API_URL, {
+      model: 'gpt-4o-mini',
+      messages: [
+        {
+          role: 'system',
+          content: 'Eres un experto en seguridad alimentaria. Respondes SOLO con números enteros.'
+        },
+        {
+          role: 'user',
+          content: prompt
+        }
+      ],
+      temperature: 0.3,
+      max_tokens: 10
+    }, {
+      headers: {
+        'Content-Type': 'application/json'
+      }
+    });
+
+    const days = parseInt(response.data.choices[0].message.content.trim());
+    
+    return isNaN(days) ? 3 : days; // Default 3 días si no se puede parsear
+  } catch (error) {
+    console.error('Error al calcular vida útil del platillo:', error);
+    return 3; // Default en caso de error
+  }
+};
