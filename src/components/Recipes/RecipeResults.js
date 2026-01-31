@@ -62,48 +62,33 @@ const RecipeResults = ({
   };
 
   const handleGenerateAnother = async () => {
-    if (!lastParams) {
-      // Si no hay parámetros guardados, volver a la pantalla de generación
-      setCurrentView('generate-recipe');
-      return;
-    }
-
-    setGenerating(true);
+    if (generating) return;
     setError('');
 
+    // --- NUEVA LÓGICA (Reemplaza desde la línea 74 aprox.) ---
+    // Obtenemos los nombres actuales para evitar repeticiones
+    const currentNames = recipes.map(r => r.name); 
+
+    setGenerating(true);
     try {
-            // Generar otra receta con los mismos parámetros
       const newRecipes = await generateRecipe({
         ...lastParams,
         regenerate: true,
-        usedRecipeNames
+        usedRecipeNames: currentNames // Enviamos la lista para que la IA sepa qué NO repetir
       });
+    // -------------------------------------------------------
 
-
-
-      // Agregar las nuevas recetas al array existente
-      setGeneratedRecipes([...recipes, ...newRecipes]);
-
-      setUsedRecipeNames(prev => [
-        ...prev,
-        ...newRecipes.map(r => r.name)
-      ]);
-
-      
-      // Ir a la nueva receta (la última agregada)
-      setCurrentIndex(recipes.length);
-    } catch (error) {
-      console.error('Error al generar otra receta:', error);
-      
-      if (error.message && error.message.includes('No es posible')) {
-        setError(error.message);
-      } else {
-        setError('Error al generar otra receta. Intenta nuevamente.');
+      if (newRecipes && newRecipes.length > 0) {
+        setGeneratedRecipes([...recipes, ...newRecipes]);
+        setCurrentIndex(recipes.length);
       }
+    } catch (err) {
+      console.error("Error al generar otra receta:", err);
+      setError(err.message || 'Error al generar nueva receta');
     } finally {
       setGenerating(false);
     }
-  };
+};
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-emerald-50 to-teal-50 p-4 flex flex-col">

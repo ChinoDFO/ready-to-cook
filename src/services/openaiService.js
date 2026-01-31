@@ -24,9 +24,13 @@ export const generateRecipe = async ({
       : '';
     
     // Texto adicional si es regeneración
-    const regenerateText = regenerate 
-      ? '\n\n⚠️ IMPORTANTE: Genera una receta COMPLETAMENTE DIFERENTE a la anterior. No repitas la misma receta, usa diferentes técnicas de cocción, sabores y/o combinaciones.'
-      : '';
+const regenerateText = regenerate 
+  ? `\n\n⚠️ REGLA DE ORO PARA ESTA PETICIÓN: 
+     La receta anterior fue del tipo "${usedRecipeNames[usedRecipeNames.length - 1]}". 
+     DEBES generar algo COMPLETAMENTE distinto en concepto, técnica y NOMBRE. 
+     Si la anterior fue una ensalada, está PROHIBIDO generar otra ensalada. 
+     Usa métodos de cocción diferentes (horneado, salteado, vapor, etc.).` 
+  : '';
     const usedNamesText = usedRecipeNames.length > 0
       ? `\n\nRECETAS YA GENERADAS (NO REPITAS NOMBRES NI PLATILLOS SIMILARES): ${usedRecipeNames.join(', ')}`
       : '';
