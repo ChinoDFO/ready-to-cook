@@ -25,11 +25,10 @@ export const generateRecipe = async ({
     
     // Texto adicional si es regeneración
 const regenerateText = regenerate 
-  ? `\n\n⚠️ REGLA DE ORO PARA ESTA PETICIÓN: 
-     La receta anterior fue del tipo "${usedRecipeNames[usedRecipeNames.length - 1]}". 
-     DEBES generar algo COMPLETAMENTE distinto en concepto, técnica y NOMBRE. 
-     Si la anterior fue una ensalada, está PROHIBIDO generar otra ensalada. 
-     Usa métodos de cocción diferentes (horneado, salteado, vapor, etc.).` 
+  ? `\n\n⚠️ INSTRUCCIÓN DE VARIEDAD:
+     La receta debe ser un platillo DISTINTO a: ${usedRecipeNames.join(', ')}.
+     Si lo anterior fue frío, haz algo caliente. Si fue dulce, haz algo salado.
+     OBLIGATORIO: Ajusta las cantidades EXACTAMENTE para ${servings} personas.`
   : '';
     const usedNamesText = usedRecipeNames.length > 0
       ? `\n\nRECETAS YA GENERADAS (NO REPITAS NOMBRES NI PLATILLOS SIMILARES): ${usedRecipeNames.join(', ')}`
@@ -105,32 +104,32 @@ const regenerateText = regenerate
 
     // Hacer petición con Axios
     const response = await axios.post(API_URL, {
-      model: 'gpt-4o-mini',
-      // AGREGAR ESTA LÍNEA AQUÍ:
-      response_format: { type: "json_object" }, 
-      messages: [
-        {
-          role: 'system',
-          content: `
-            Responde EXCLUSIVAMENTE con JSON valido.
-            No escribas texto fuera del JSON.
-            No incluyas comentarios ni explicaciones.` // [cite: 25, 26]
-        },
-        {
-          role: 'user',
-          content: prompt
-        }
-      ],
-      temperature: regenerate ? 0.75 : 0.6,
-      top_p: 0.95,
-      presence_penalty: regenerate ? 0.8 : 0.2,
-      frequency_penalty: regenerate ? 0.6 : 0.2,
-      max_tokens: 700 // [cite: 27]
-    }, {
-      headers: {
-        'Content-Type': 'application/json'
-      }
-    });
+  model: 'gpt-4o-mini',
+  // ESTA LÍNEA ES VITAL para evitar las comillas simples y errores de formato
+  response_format: { type: "json_object" }, 
+  messages: [
+    {
+      role: 'system',
+      content: `Eres un generador de recetas profesional que SOLO responde en formato JSON. 
+      REGLAS DE FORMATO:
+      - Usa SIEMPRE comillas dobles (") para strings. Jamás uses comillas simples (').
+      - Mantén estrictamente el número de porciones solicitado: ${servings}.
+      - No incluyas texto explicativo fuera del objeto JSON.`
+    },
+    {
+      role: 'user',
+      content: prompt // Tu prompt ya incluye la variable ${servings} [cite: 188, 197]
+    }
+  ],
+  // Bajamos un poco la temperatura para ganar estabilidad sin perder variedad
+  temperature: regenerate ? 0.8 : 0.6, 
+  top_p: 1, 
+  presence_penalty: regenerate ? 1.0 : 0.2, // Penalizamos conceptos repetidos
+  frequency_penalty: 0.5,
+  max_tokens: 1000 
+}, {
+  headers: { 'Content-Type': 'application/json' }
+});
 
     const content = response.data.choices[0].message.content.trim();
 
