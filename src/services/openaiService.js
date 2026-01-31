@@ -46,6 +46,7 @@ export const generateRecipe = async ({
     1. Si las categorías seleccionadas son incompatibles con los ingredientes disponibles (por ejemplo, "Vegetariana" pero hay carne, o "Vegana" pero hay lácteos/huevos), debes responder con un mensaje de error en lugar de generar una receta.
     2. Si no es posible crear una receta que cumpla con TODAS las categorías seleccionadas simultáneamente, responde con un mensaje de error explicando la incompatibilidad.
     3. Solo genera la receta si todos los ingredientes disponibles son compatibles con todas las categorías seleccionadas.
+    4. IMPORTANTE: Usa SIEMPRE comillas dobles (") para todas las claves y valores del JSON. NUNCA uses comillas simples (').
 
     SEPARACIÓN DE INGREDIENTES (MUY IMPORTANTE):
     - En "ingredients": SOLO incluye los ingredientes que están en la lista de DISPONIBLES arriba.
@@ -101,13 +102,15 @@ export const generateRecipe = async ({
     // Hacer petición con Axios
     const response = await axios.post(API_URL, {
       model: 'gpt-4o-mini',
+      // AGREGAR ESTA LÍNEA AQUÍ:
+      response_format: { type: "json_object" }, 
       messages: [
         {
           role: 'system',
           content: `
             Responde EXCLUSIVAMENTE con JSON valido.
             No escribas texto fuera del JSON.
-            No incluyas comentarios ni explicaciones.`
+            No incluyas comentarios ni explicaciones.` // [cite: 25, 26]
         },
         {
           role: 'user',
@@ -118,7 +121,7 @@ export const generateRecipe = async ({
       top_p: 0.95,
       presence_penalty: regenerate ? 0.8 : 0.2,
       frequency_penalty: regenerate ? 0.6 : 0.2,
-      max_tokens: 700
+      max_tokens: 700 // [cite: 27]
     }, {
       headers: {
         'Content-Type': 'application/json'
