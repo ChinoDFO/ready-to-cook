@@ -2,6 +2,8 @@
 import React, { useState } from 'react';
 import { Heart, ChevronRight, ChevronLeft, AlertCircle, RefreshCw } from 'lucide-react';
 import { generateRecipe } from '../../services/openaiService';
+import React, { useState, useEffect } from 'react'; // Asegúrate de importar useEffect
+
 
 const RecipeResults = ({ 
   setCurrentView, 
@@ -14,6 +16,15 @@ const RecipeResults = ({
   const [generating, setGenerating] = useState(false);
   const [error, setError] = useState('');
   const [usedRecipeNames, setUsedRecipeNames] = useState([]);
+
+  useEffect(() => {
+    document.title = "Recetas Generadas | Ready-to-Cook"; // El nombre que quieras
+    
+    // Opcional: Volver al nombre original cuando el usuario salga de esta pantalla
+    return () => {
+      document.title = "Ready-to-Cook";
+    };
+  }, []);
 
   // Guardar los parámetros de la última generación
   const [lastParams] = useState(() => {
